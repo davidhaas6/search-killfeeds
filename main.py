@@ -1,4 +1,4 @@
-from vision import preprocess, get_contour_bboxs
+from vision import preprocess, get_contour_bboxs, get_img_text
 
 from matplotlib import pyplot as plt
 import cv2
@@ -15,9 +15,9 @@ def main():
     for x, y, w, h in bboxes:
         crop = img[y : y + h, x : x + w]
 
-        df = pytesseract.image_to_data(crop, output_type="data.frame")
-        text = " ".join(df.text[df.conf > 30])
-
+        text = get_img_text(crop, min_confidence=30)
+        print(text)
+        
         plt.figure()
         plt.imshow(crop, cmap="binary")
         plt.title(text)

@@ -1,6 +1,7 @@
 from matplotlib import pyplot as plt
 import cv2 
 import numpy as np
+import pytesseract
 
 def preprocess(img,invert=False):
     img = cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
@@ -34,3 +35,9 @@ def get_contour_bboxs(gray: np.ndarray, verbose=False):
         cv2.imwrite(f'out_contour.png',output)
 
     return bboxes
+
+
+def get_img_text(img, min_confidence=0):
+    df = pytesseract.image_to_data(img, output_type="data.frame")
+    text = " ".join(df.text[df.conf > min_confidence])
+    return text
