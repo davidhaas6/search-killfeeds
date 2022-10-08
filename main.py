@@ -2,7 +2,6 @@ from vision import preprocess, get_contour_bboxs, get_img_text
 
 from matplotlib import pyplot as plt
 import cv2
-import pytesseract
 import argparse
 import os.path
 
@@ -10,16 +9,32 @@ DIR = "./test-data/"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='OCR search sngine')
+    subparsers = parser.add_subparsers()
     parser.add_argument(
         'image', 
         type=str, default=None, 
-        help=''
+        required=False,
+        help='Path for the input image of the OCR model'
     )
     parser.add_argument(
-        '-v', '--verbose'
+        '-v', '--verbose',
         action='store_true', 
         help='Enable logging and visualizations'
+    )
+
+    dataset = subparsers.add_parser('dataset')
+    dataset.add_argument(
+        '-t', '--test',
+        required=False,
+        action='store_true', 
+        help='Run the dataset module'
+    )
+    dataset.add_argument(
+        '-m', '--make',
+        required=False,
+        action='store_true', 
+        help='Create a dataset'
     )
     return parser.parse_args()
 
