@@ -147,8 +147,11 @@ class NNTextDetect:
         
         return boxes, confidences
 
-    def draw_bboxes(self,img, bboxes):
+    def draw_bboxes(self,img, bboxes, verbose=False):
         img = img.copy()
         for (startX, startY, endX, endY) in bboxes:
             cv2.rectangle(img, (startX, startY), (endX, endY), (0, 255, 0), 2)
+        if verbose:
+            cv2.imshow("Text Detection", img)
+            cv2.waitKey(0)
         return img
