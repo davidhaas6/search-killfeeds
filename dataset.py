@@ -9,11 +9,11 @@ from sys import argv
 from vision import crop_topright_quadrant
 
 
-def pull_video(video_id: str, filetype, resolution="720p") -> io.BytesIO:
+def pull_video(video_id: str, filetype, resolution="720p", verbose=False) -> io.BytesIO:
     buffy = io.BytesIO()
     yt = YouTube(f"https://www.youtube.com/watch?v={video_id}")
     stream = yt.streams.filter(
-        file_extension=filetype, res=resolution, progressive="false"
+        file_extension=filetype, res=resolution
     ).first()
     stream.stream_to_buffer(buffy)
     return buffy, stream
@@ -35,14 +35,14 @@ def preprocess_frame(frame):
 
 def main():
     ftype = 'mp4'
-    res = '720p'
-    vid_id = argv[1] if len(argv) >= 2 else 'A4rahpCPX9Q'
+    res = '1080p'
+    vid_id = argv[1] if len(argv) >= 2 else '2hu1bUHL1mc'
 
-    im_buff, stream = pull_video(vid_id, ftype, res)
-    frames = get_frames(im_buff, ftype, stream.fps, 1)
+    im_buff, stream = pull_video(vid_id, ftype, res,True)
+    frames = get_frames(im_buff, ftype, stream.fps, 10)
     cropped = map(preprocess_frame, frames)
 
-    for i, f in tqdm(enumerate(cropped)):
+    for i, f in tqdm(enumerate(cropped),total=len(frames)):
         imageio.imwrite(f"./test-data/out/{i}.png", f, extension=".png")
 
 

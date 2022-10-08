@@ -12,9 +12,8 @@ def preprocess(img,invert=False):
     return img
 
 
-
 def batch_preprocess(paths, out_dir=None, invert=False):
-    imgs = [preprocess(cv2.imread(p)) for p in paths]
+    imgs = [preprocess(cv2.imread(p), invert) for p in paths]
 
     if out_dir is not None:
         if not os.path.exists(out_dir):
@@ -51,6 +50,10 @@ def get_contour_bboxs(gray: np.ndarray, verbose=False):
         cv2.imwrite(f'out_contour.png',output)
 
     return bboxes
+
+
+def detect_text(img):
+    return cv2.dnn.TextDetectionModel.detect(img)
 
 
 def get_img_text(img, min_confidence=0):
