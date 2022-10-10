@@ -59,7 +59,7 @@ def topright_crop(img: np.ndarray, h_pct: float, w_pct: float) -> np.ndarray:
         np.ndarray: the cropped image
     """
     h, w = img.shape[:2]
-    return img[0 : int(h * h_pct), int(h * h_pct) : w]
+    return img[0 : int(h * h_pct), int(w * (1-w_pct)) : w]
 
 
 def get_contour_bboxs(gray: np.ndarray, verbose=False):
@@ -70,7 +70,7 @@ def get_contour_bboxs(gray: np.ndarray, verbose=False):
         verbose (bool, optional): Saves a debug image to ./out_contour.png. Defaults to False.
 
     Returns:
-        List[tuple]: An array of (x,y,w,h) tuples representing bounding boxes 
+        List[tuple]: An array of (x,y,w,h) tuples representing bounding boxes
     """
     contours = cv2.findContours(gray, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)[0]
     bboxes = []
@@ -115,12 +115,29 @@ class NNTextDetect:
         self._layer_names = ["feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"]
 
     def detect_text(self, rgb_img, min_confidence=0.5):
-        rgb_img = self._resize_closest_const(rgb_img, 32)
-        scores, geom = self._predict(rgb_img)
-        bboxes, conf = self._get_bboxes(geom, scores, min_confidence)
-        return bboxes, conf
+        """Returns bounding boxes of text in the image
 
-    def _predict(self, rgb_img):
+        Args:
+            rgb_img (ndarray): An image as a 3d array rgb channels
+            min_confidence (float, optional): Drop results with confidence lower than this. Defaults to 0.5.
+
+        Returns:
+            (ndarray): Rows of bounding boxes represented as (startX, startY, endX, endY)
+        """
+        resized_img = self._resize_closest_multiple(rgb_img, 32)
+        scores, geom = self._predict(resized_img)
+        bboxes = self._geom_to_bboxes(geom, scores, min_confidence)
+
+        if len(bboxes) > 0:
+            # rescale bounding boxes to the original image's coordinate system
+            h0, w0 = rgb_img.shape[:2]
+            h1, w1 = resized_img.shape[:2]
+            bboxes = bboxes * [h0 / h1, w0 / w1, h0 / h1, w0 / w1]
+            bboxes = bboxes.round().astype('uint16')
+        
+        return bboxes
+
+    def _predict(self, rgb_img) -> tuple:
         h, w = rgb_img.shape[:2]
         blob = cv2.dnn.blobFromImage(
             rgb_img,
@@ -133,13 +150,13 @@ class NNTextDetect:
         (scores, geometry) = self._net.forward(self._layer_names)
         return scores, geometry
 
-    def _resize_closest_const(self, img, multiple=32):
+    def _resize_closest_multiple(self, img: np.ndarray, multiple=32) -> np.ndarray:
         h, w = img.shape[:2]
         h1 = (h + multiple) - ((h + multiple) % multiple)
         w1 = (w + multiple) - ((w + multiple) % multiple)
         return cv2.resize(img, (w1, h1))
 
-    def _get_bboxes(self, geometry, scores, min_confidence=0.5):
+    def _geom_to_bboxes(self, geometry: np.ndarray, scores: np.ndarray, min_confidence=0.5) -> np.ndarray:
         (numRows, numCols) = geometry.shape[2:4]
         rects = []
         confidences = []
@@ -155,7 +172,6 @@ class NNTextDetect:
             anglesData = geometry[0, 4, r]
 
             for c in range(0, numCols):
-                # if our score does not have sufficient probability, ignore it
                 if scoresData[c] < min_confidence:
                     continue
 
@@ -178,10 +194,10 @@ class NNTextDetect:
 
         boxes = non_max_suppression(np.array(rects), probs=confidences)
 
-        return boxes, confidences
+        return boxes
 
     def draw_bboxes(self, img, bboxes, verbose=False):
-        img = img.copy()
+        img = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2RGB)
         for (startX, startY, endX, endY) in bboxes:
             cv2.rectangle(img, (startX, startY), (endX, endY), (0, 255, 0), 2)
         if verbose:

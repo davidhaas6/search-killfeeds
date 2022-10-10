@@ -5,13 +5,20 @@ from numpy import ndarray
 from pytube import YouTube
 from tqdm import tqdm
 from sys import argv
+import logging
+from util import TimeArr
 
-from vision import crop_topright_quadrant
+from vision import topright_crop, NNTextDetect
+from combo_box import combine_boxes
 
 
-def pull_video(video_id: str, filetype, resolution="720p", verbose=False) -> io.BytesIO:
+def id_to_url(vid_id):
+    return f"https://www.youtube.com/watch?v={vid_id}"
+
+
+def pull_video(video_id: str, filetype, resolution="720p") -> io.BytesIO:
     buffy = io.BytesIO()
-    yt = YouTube(f"https://www.youtube.com/watch?v={video_id}")
+    yt = YouTube(id_to_url(video_id))
     stream = yt.streams.filter(
         file_extension=filetype, res=resolution
     ).first()
@@ -30,20 +37,46 @@ def get_frames(buffer, filetype: str, fps: float, sample_rate_hz: float) -> List
 
 
 def preprocess_frame(frame):
-    return crop_topright_quadrant(frame)
+    return topright_crop(frame,0.4,0.4)
+
+
+def process_video(video_id: str, fs: float, res="1080p"):
+    logging.info(f"Pulling {id_to_url(video_id)}")
+    clock = TimeArr()
+    im_buff, stream = pull_video(video_id, "mp4", res)
+    clock.save("pulled video")
+    logging.info(f"pulled video in {clock.last():.2f} seconds")
+
+    frames = get_frames(im_buff, "mp4", stream.fps, fs)
+    clock.save("got frames")
+
+    cropped = map(preprocess_frame, frames)
+    det = NNTextDetect('weights/east_text_detection_weights.pb')
+
+    clock.report(logging.info)
+    for img in tqdm(cropped, total=len(frames)):
+        txt_boxes = det.detect_text(img)
+        det.draw_bboxes(img, txt_boxes, True)
+        if len(txt_boxes) == 0:
+            continue
+
+        combo_boxes = combine_boxes(txt_boxes)
+        det.draw_bboxes(img, combo_boxes, True)
+        # cv2.imshow(combo_boxes)
+
 
 
 def main():
-    ftype = 'mp4'
-    res = '1080p'
-    vid_id = argv[1] if len(argv) >= 2 else '2hu1bUHL1mc'
+    logging.basicConfig(level = logging.INFO)
 
-    im_buff, stream = pull_video(vid_id, ftype, res,True)
-    frames = get_frames(im_buff, ftype, stream.fps, 10)
-    cropped = map(preprocess_frame, frames)
+    vid_id = '2hu1bUHL1mc'
+    if len(argv) >= 2:
+        if argv[1] == "stabby": 
+            vid_id = "TYkkWeOzlbM"
+        elif argv[1] == "scream":
+            vid_id = "H9d2c1oevUU"
 
-    for i, f in tqdm(enumerate(cropped),total=len(frames)):
-        imageio.imwrite(f"./test-data/out/{i}.png", f, extension=".png")
+    process_video(vid_id, 1)
 
 
 if __name__ == "__main__":
