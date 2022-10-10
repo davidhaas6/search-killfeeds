@@ -8,6 +8,15 @@ from imutils.object_detection import non_max_suppression
 
 
 def preprocess(img, invert=False):
+    """Preprocess an image into a binary image
+
+    Args:
+        img (ndarray): the image
+        invert (bool, optional): Invert the binary image. Defaults to False.
+
+    Returns:
+        ndarray: The preprocessed image
+    """
     img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
     if invert:
@@ -16,6 +25,16 @@ def preprocess(img, invert=False):
 
 
 def batch_preprocess(paths, out_dir=None, invert=False):
+    """Preprocess a set of images
+
+    Args:
+        paths (List[str]): A list of image paths to read in
+        out_dir (str, optional): A directory to write the preprocessed images to. Defaults to None.
+        invert (bool, optional): Invert the binary images. Defaults to False.
+
+    Returns:
+        list[ndarray]: A list of the preprocessed images
+    """
     imgs = [preprocess(cv2.imread(p), invert) for p in paths]
 
     if out_dir is not None:
@@ -28,15 +47,31 @@ def batch_preprocess(paths, out_dir=None, invert=False):
     return imgs
 
 
-def crop_topright_quadrant(img):
-    (
-        h,
-        w,
-    ) = img.shape[:2]
-    return img[0 : h // 2, w // 2 : w]
+def topright_crop(img: np.ndarray, h_pct: float, w_pct: float) -> np.ndarray:
+    """Crop the top right corner of an image
+
+    Args:
+        img (np.ndarray): The image to crop
+        h_pct (float): The percent of img's height to crop the image to
+        w_pct (float): The percent of img's width to crop the image to
+
+    Returns:
+        np.ndarray: the cropped image
+    """
+    h, w = img.shape[:2]
+    return img[0 : int(h * h_pct), int(h * h_pct) : w]
 
 
 def get_contour_bboxs(gray: np.ndarray, verbose=False):
+    """Get the bounding boxes of an image via contour polygon approximation
+
+    Args:
+        gray (np.ndarray): A gray image
+        verbose (bool, optional): Saves a debug image to ./out_contour.png. Defaults to False.
+
+    Returns:
+        List[tuple]: An array of (x,y,w,h) tuples representing bounding boxes 
+    """
     contours = cv2.findContours(gray, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)[0]
     bboxes = []
     if verbose:
@@ -69,6 +104,8 @@ def get_img_text(img, min_confidence=0):
 
 
 class NNTextDetect:
+    # https://github.com/ZER-0-NE/EAST-Detector-for-text-detection-using-OpenCV
+
     def __init__(self, model_path):
         self._net = cv2.dnn.readNet(model_path)
 
@@ -77,13 +114,11 @@ class NNTextDetect:
         # second can be used to derive the bounding box coordinates of text
         self._layer_names = ["feature_fusion/Conv_7/Sigmoid", "feature_fusion/concat_3"]
 
-
     def detect_text(self, rgb_img, min_confidence=0.5):
-        rgb_img = self._resize_closest_const(rgb_img,32)
+        rgb_img = self._resize_closest_const(rgb_img, 32)
         scores, geom = self._predict(rgb_img)
         bboxes, conf = self._get_bboxes(geom, scores, min_confidence)
         return bboxes, conf
-
 
     def _predict(self, rgb_img):
         h, w = rgb_img.shape[:2]
@@ -98,13 +133,11 @@ class NNTextDetect:
         (scores, geometry) = self._net.forward(self._layer_names)
         return scores, geometry
 
-
     def _resize_closest_const(self, img, multiple=32):
         h, w = img.shape[:2]
-        h1 = (h+multiple) - ((h+multiple) % multiple)
-        w1 = (w+multiple) - ((w+multiple) % multiple)
-        return cv2.resize(img,(w1,h1))
-
+        h1 = (h + multiple) - ((h + multiple) % multiple)
+        w1 = (w + multiple) - ((w + multiple) % multiple)
+        return cv2.resize(img, (w1, h1))
 
     def _get_bboxes(self, geometry, scores, min_confidence=0.5):
         (numRows, numCols) = geometry.shape[2:4]
@@ -113,7 +146,7 @@ class NNTextDetect:
 
         for r in range(0, numRows):
             scoresData = scores[0, 0, r]
-            boxData = geometry[0,:,r]
+            boxData = geometry[0, :, r]
             # print(boxData)
             xData0 = geometry[0, 0, r]
             xData1 = geometry[0, 1, r]
@@ -142,12 +175,12 @@ class NNTextDetect:
 
                 rects.append((startX, startY, endX, endY))
                 confidences.append(scoresData[c])
-        
+
         boxes = non_max_suppression(np.array(rects), probs=confidences)
-        
+
         return boxes, confidences
 
-    def draw_bboxes(self,img, bboxes, verbose=False):
+    def draw_bboxes(self, img, bboxes, verbose=False):
         img = img.copy()
         for (startX, startY, endX, endY) in bboxes:
             cv2.rectangle(img, (startX, startY), (endX, endY), (0, 255, 0), 2)
