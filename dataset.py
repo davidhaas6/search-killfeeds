@@ -7,8 +7,9 @@ from tqdm import tqdm
 from sys import argv
 import logging
 from util import TimeArr
+import cv2
 
-from vision import topright_crop, NNTextDetect
+from vision import topright_crop, NNTextDetect, get_img_text
 from combo_box import combine_boxes
 
 
@@ -40,7 +41,24 @@ def preprocess_frame(frame):
     return topright_crop(frame,0.4,0.4)
 
 
-def process_video(video_id: str, fs: float, res="1080p", show=False):
+def extract_kfeeds(img: ndarray, model: NNTextDetect, verbose=False) -> List[ndarray]:
+    txt_boxes = model.detect_text(img)
+    if len(txt_boxes) == 0:
+        return []
+
+    combo_boxes = combine_boxes(txt_boxes)
+    killfeed_line_imgs = []
+    for bbox in combo_boxes:
+        x0,y0,x1,y1 = bbox
+        killfeed_line_imgs.append(img[y0:y1,x0:x1,:])
+
+    if verbose: 
+        model.draw_bboxes(img, txt_boxes, False, (255,0,0))
+        model.draw_bboxes(img, combo_boxes, True)
+
+    return killfeed_line_imgs
+
+def process_video(video_id: str, fs: float, res="1080p", show=False) -> List[ndarray]:
     logging.info(f"Pulling {id_to_url(video_id)}")
     clock = TimeArr()
     im_buff, stream = pull_video(video_id, "mp4", res)
@@ -50,28 +68,26 @@ def process_video(video_id: str, fs: float, res="1080p", show=False):
     frames = get_frames(im_buff, "mp4", stream.fps, fs)
     clock.save("got frames")
 
-    cropped = map(preprocess_frame, frames)
-    det = NNTextDetect('weights/east_text_detection_weights.pb')
+    txt_detection_model = NNTextDetect('weights/east_text_detection_weights.pb')
 
     clock.report(logging.info)
 
-    extracted_kf_rows = []
-    for img in tqdm(cropped, total=len(frames)):
-        txt_boxes = det.detect_text(img)
-        if len(txt_boxes) == 0:
-            continue
-        if show:
-            det.draw_bboxes(img, txt_boxes, True)
-        combo_boxes = combine_boxes(txt_boxes)
-        if show:
-            det.draw_bboxes(img, combo_boxes, True)
-        for bbox in combo_boxes:
-            x0,y0,x1,y1 = bbox
-            kf_row = img[y0:y1,x0:x1,:]
-            extracted_kf_rows.append(kf_row)
+    kfeed_imgs = []
+    for img in map(preprocess_frame, frames):
+        try:
+            kfeed_imgs += extract_kfeeds(img, txt_detection_model)
+        except Exception as e:
+            logging.error(str(e))
+            cv2.imshow("error img", img)
+            cv2.waitKey(0)
 
-    return extracted_kf_rows
-        # cv2.imshow(combo_boxes)
+    
+    for img in kfeed_imgs:
+        text = get_img_text(img)
+        cv2.imshow(text,img)
+        cv2.waitKey(0)
+
+    return kfeed_imgs
 
 
 

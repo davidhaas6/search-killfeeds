@@ -196,10 +196,10 @@ class NNTextDetect:
 
         return boxes
 
-    def draw_bboxes(self, img, bboxes, verbose=False):
+    def draw_bboxes(self, img, bboxes, verbose=False, color=(0,255,0)):
         img = cv2.cvtColor(img.copy(), cv2.COLOR_BGR2RGB)
         for (startX, startY, endX, endY) in bboxes:
-            cv2.rectangle(img, (startX, startY), (endX, endY), (0, 255, 0), 2)
+            cv2.rectangle(img, (startX, startY), (endX, endY), color, 2)
         if verbose:
             cv2.imshow("Text Detection", img)
             cv2.waitKey(0)
