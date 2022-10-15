@@ -8,6 +8,8 @@ from sys import argv
 import logging
 from util import TimeArr
 import cv2
+import numpy as np
+from collections import defaultdict
 
 from vision import topright_crop, NNTextDetect, get_img_text
 from combo_box import combine_boxes
@@ -58,35 +60,27 @@ def extract_kfeeds(img: ndarray, model: NNTextDetect, verbose=False) -> List[nda
 
     return killfeed_line_imgs
 
-def process_video(video_id: str, fs: float, res="1080p", show=False) -> List[ndarray]:
+
+def process_video(video_id: str, fs: float, res="1080p", interactive=False) -> List[ndarray]:
     logging.info(f"Pulling {id_to_url(video_id)}")
-    clock = TimeArr()
     im_buff, stream = pull_video(video_id, "mp4", res)
-    clock.save("pulled video")
-    logging.info(f"pulled video in {clock.last():.2f} seconds")
-
     frames = get_frames(im_buff, "mp4", stream.fps, fs)
-    clock.save("got frames")
-
-    txt_detection_model = NNTextDetect('weights/east_text_detection_weights.pb')
-
-    clock.report(logging.info)
-
-    kfeed_imgs = []
-    for img in map(preprocess_frame, frames):
-        try:
-            kfeed_imgs += extract_kfeeds(img, txt_detection_model)
-        except Exception as e:
-            logging.error(str(e))
-            cv2.imshow("error img", img)
-            cv2.waitKey(0)
-
     
-    for img in kfeed_imgs:
-        text = get_img_text(img)
-        cv2.imshow(text,img)
-        cv2.waitKey(0)
+    # Extract text in the image
+    txt_detection_model = NNTextDetect('weights/east_text_detection_weights.pb')
+    frame_texts = defaultdict(list)
+    kfeed_imgs = []
+    for frame_num, img in enumerate(map(preprocess_frame, frames)):
+        for kf_img in extract_kfeeds(img, txt_detection_model, interactive):
+            text = get_img_text(kf_img)
+            kfeed_imgs.append(img)
+            frame_texts[frame_num].append(text)
 
+    # store the data
+    data = {
+        "text": ""
+    }
+    
     return kfeed_imgs
 
 

@@ -97,7 +97,7 @@ def detect_text(img):
     return cv2.dnn.TextDetectionModel.detect(img)
 
 
-def get_img_text(img, min_confidence=0):
+def get_img_text(img, min_confidence=0) -> str:
     df = pytesseract.image_to_data(img, output_type="data.frame")
     text = " ".join(df.text[df.conf > min_confidence])
     return text
