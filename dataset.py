@@ -1,4 +1,5 @@
 import io
+import json
 from typing import List
 import imageio.v3 as imageio
 from numpy import ndarray
@@ -10,6 +11,8 @@ from util import TimeArr
 import cv2
 import numpy as np
 from collections import defaultdict
+import pandas as pd
+import vision
 
 from vision import topright_crop, NNTextDetect, get_img_text
 from combo_box import combine_boxes
@@ -61,27 +64,31 @@ def extract_kfeeds(img: ndarray, model: NNTextDetect, verbose=False) -> List[nda
     return killfeed_line_imgs
 
 
-def process_video(video_id: str, fs: float, res="1080p", interactive=False) -> List[ndarray]:
+def process_video(video_id: str, fs_hz: float, res="1080p", interactive=False, write=False) -> List[ndarray]:
     logging.info(f"Pulling {id_to_url(video_id)}")
     im_buff, stream = pull_video(video_id, "mp4", res)
-    frames = get_frames(im_buff, "mp4", stream.fps, fs)
-    
+    frames = get_frames(im_buff, "mp4", stream.fps, fs_hz)
+    preprocessed = map(preprocess_frame, frames)
+
     # Extract text in the image
     txt_detection_model = NNTextDetect('weights/east_text_detection_weights.pb')
-    frame_texts = defaultdict(list)
-    kfeed_imgs = []
-    for frame_num, img in enumerate(map(preprocess_frame, frames)):
+    data = []
+    for frame_num, img in tqdm(enumerate(preprocessed), total=len(frames), desc="Performing OCR..."):
+        ocr_strings = []
         for kf_img in extract_kfeeds(img, txt_detection_model, interactive):
-            text = get_img_text(kf_img)
-            kfeed_imgs.append(img)
-            frame_texts[frame_num].append(text)
+            img_text = get_img_text(kf_img)
+            if len(img_text.strip()) > 0:
+                ocr_strings.append(img_text)
+        
+        if len(ocr_strings) > 0:
+            data.append({
+                "video_id": video_id,
+                "timestamp_s": frame_num / fs_hz,
+                "identified_text": ocr_strings
+            })
 
-    # store the data
-    data = {
-        "text": ""
-    }
-    
-    return kfeed_imgs
+    if interactive: import code; code.interact(local=locals())
+    return data
 
 
 
@@ -98,7 +105,9 @@ def main():
     if len(argv) > 1:
         vid_id = vids[argv[1]] if argv[1] in vids else argv[1]
 
-    process_video(vid_id, 1, "1080p", True)
+    vid_data = process_video(vid_id, 1, "1080p", False)
+    with open('./test-data/out.json',"w") as f:
+        f.write(json.dumps(vid_data))
 
 
 if __name__ == "__main__":
