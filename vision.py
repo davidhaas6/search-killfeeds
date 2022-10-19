@@ -1,3 +1,4 @@
+from typing import List
 from matplotlib import pyplot as plt
 import cv2
 import numpy as np
@@ -5,9 +6,10 @@ import pytesseract
 import os
 import tqdm
 from imutils.object_detection import non_max_suppression
+from PIL import Image
 
 
-def preprocess(img, invert=False):
+def thresholdize(rgb_img: np.ndarray, invert=False):
     """Preprocess an image into a binary image
 
     Args:
@@ -17,8 +19,10 @@ def preprocess(img, invert=False):
     Returns:
         ndarray: The preprocessed image
     """
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2GRAY)
+    img = cv2.GaussianBlur(img,(3,3),0)
+    # img = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,19,-2)
+    # img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
     if invert:
         img = cv2.bitwise_not(img)
     return img
@@ -35,7 +39,7 @@ def batch_preprocess(paths, out_dir=None, invert=False):
     Returns:
         list[ndarray]: A list of the preprocessed images
     """
-    imgs = [preprocess(cv2.imread(p), invert) for p in paths]
+    imgs = [thresholdize(cv2.imread(p), invert) for p in paths]
 
     if out_dir is not None:
         if not os.path.exists(out_dir):
@@ -101,6 +105,23 @@ def get_img_text(img, min_confidence=0) -> str:
     df = pytesseract.image_to_data(img, output_type="data.frame")
     text = " ".join(df.text[df.conf > min_confidence])
     return text
+
+
+
+class TrOCR:
+    """ Transformer-based OCR Model """
+    def __init__(self,model_name='microsoft/trocr-small-printed') -> None:
+        from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+        self.processor = TrOCRProcessor.from_pretrained(model_name)
+        self.model = VisionEncoderDecoderModel.from_pretrained(model_name)
+
+
+    def get_text(self, image: np.ndarray) -> str:
+        image = Image.fromarray(image).convert("RGB")
+        pixel_values = self.processor(image, return_tensors="pt").pixel_values 
+        generated_ids = self.model.generate(pixel_values)
+        textarr = self.processor.batch_decode(generated_ids, skip_special_tokens=False)
+        return ' '.join(textarr)
 
 
 class NNTextDetect:
